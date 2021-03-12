@@ -37,12 +37,14 @@ int main(int argc, char* argv[]) {
     // Run Shortest Job First algorithm
     if (algorithm == "SJF" || algorithm == "NP") {
         nonPreemptive(processes, algorithm);
-    } else if (algorithm == "SRTF") {
+    } else if (algorithm == "SRTF" || algorithm == "PP") {
         Preemptive(processes, algorithm);
-    } else if (algorithm == "PP") {
-
     } else {
         cout << "Error: Invalid sorting algorithm" << endl;
+    }
+
+    for (process *p : processes) {
+        delete p;
     }
 
     return 0;
@@ -63,7 +65,7 @@ vector<process *> readFile(const string& filename) {
 
     if (inputFile.is_open()) {
         while(getline(inputFile, line)) {
-            process *p = new process{};
+            auto *p = new process{};
             stringstream ss(line);
 
             getline(ss, line, ' ');

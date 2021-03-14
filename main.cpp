@@ -1,3 +1,12 @@
+/**
+ * Dave Anderson and Denis Rajic
+ * CPSC 5041, Seattle University
+ *
+ * This program provides the user to read in an input file of processes, and choose between
+ * four scheduling algorithms: SJF, SRTF, NP, PP. The program will schedule the processes,
+ * and print out when each process starts, and statistics about CPU usage.
+ */
+
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -21,24 +30,36 @@ struct process {
     int termination;
 };
 
-vector<process *> readFile(const string& filename);
+vector<process *> readFile(const string &filename);
+
 void nonPreemptive(vector<process *> &processes, const string &algorithm);
-void Preemptive(vector<process *> &processes, const string &algorithm);
+
+void preemptive(vector<process *> &processes, const string &algorithm);
+
 void sortReadyQueue(queue<process *> &readyQueue);
+
 void sortNPQueue(queue<process *> &readyQueue);
 
-int main(int argc, char* argv[]) {
+void sortByArrival(vector<process *> &processes);
+
+void printStatistics(int time, int idleTime,
+                     int totalTurnaround, int totalBurstTime,
+                     int worstCaseWaitTime, int processesSize);
+
+int main(int argc, char *argv[]) {
     string filename = argv[1];
     string algorithm = argv[2];
 
     // Fill vector with all processes
     vector<process *> processes = readFile(filename);
 
-    // Run Shortest Job First algorithm
+    // Initially sort processes by arrival time
+    sortByArrival(processes);
+
     if (algorithm == "SJF" || algorithm == "NP") {
         nonPreemptive(processes, algorithm);
     } else if (algorithm == "SRTF" || algorithm == "PP") {
-        Preemptive(processes, algorithm);
+        preemptive(processes, algorithm);
     } else {
         cout << "Error: Invalid sorting algorithm" << endl;
     }
@@ -55,7 +76,7 @@ int main(int argc, char* argv[]) {
  * @param filename
  * @return
  */
-vector<process *> readFile(const string& filename) {
+vector<process *> readFile(const string &filename) {
     vector<process *> processes;
 
     ifstream inputFile;
@@ -64,7 +85,7 @@ vector<process *> readFile(const string& filename) {
 
 
     if (inputFile.is_open()) {
-        while(getline(inputFile, line)) {
+        while (getline(inputFile, line)) {
             auto *p = new process{};
             stringstream ss(line);
 
@@ -92,9 +113,10 @@ vector<process *> readFile(const string& filename) {
 /**
  * Shortest Job First Scheduling Process
  *
- * @param processes List of processes that will be put into algorithm
+ * @param processes List of processes that will be executed
+ * @param algorithm User argument for sorting by burst time or priority
  */
-void nonPreemptive(vector<process *> &processes, const string& algorithm) {
+void nonPreemptive(vector<process *> &processes, const string &algorithm) {
     queue<process *> yetToArrive;
     queue<process *> readyQueue;
 
@@ -115,8 +137,8 @@ void nonPreemptive(vector<process *> &processes, const string& algorithm) {
 
         // Loop through each process in the yetToArrive queue and push the
         // items that have arrived to readyQueue
-        while(!yetToArrive.empty() &&
-              yetToArrive.front()->arrivalTime <= time) {
+        while (!yetToArrive.empty() &&
+               yetToArrive.front()->arrivalTime <= time) {
             process *p = yetToArrive.front();
             // Move process to ready queue
             readyQueue.push(p);
@@ -144,7 +166,7 @@ void nonPreemptive(vector<process *> &processes, const string& algorithm) {
             }
 
 
-            while(!readyQueue.empty()) {
+            while (!readyQueue.empty()) {
                 // Current process
                 process *currentProcess = readyQueue.front();
                 currentProcess->termination = time + currentProcess->burstTime;
@@ -172,8 +194,8 @@ void nonPreemptive(vector<process *> &processes, const string& algorithm) {
                 time += currentProcess->burstTime;
 
                 // Check if there are other processes that have arrived
-                while(!yetToArrive.empty() &&
-                      yetToArrive.front()->arrivalTime <= time) {
+                while (!yetToArrive.empty() &&
+                       yetToArrive.front()->arrivalTime <= time) {
                     process *p = yetToArrive.front();
                     readyQueue.push(p);
                     yetToArrive.pop();
@@ -188,16 +210,17 @@ void nonPreemptive(vector<process *> &processes, const string& algorithm) {
         }
     }
 
-    // Print stats on cpu utilization, avg wait time, worst-case wait time
-    cout << "CPU Utilization: " << round(100 * (time - idleTime) / (double)
-            time) << "%" << endl;
-    cout << "Average waiting time: " << setprecision(4) <<
-         (totalTurnaround - totalBurstTime) / (double) processes.size() << endl;
-    cout << "Worst-case waiting time: " << worstCaseWaitTime << endl;
+    printStatistics(time, idleTime, totalTurnaround, totalBurstTime, worstCaseWaitTime, processes.size());
+
 }
 
-
-void Preemptive(vector<process *> &processes, const string &algorithm) {
+/**
+ * Shortest Remaining Time First Scheduling Process
+ *
+ * @param processes List of processes that will be executed
+ * @param algorithm User argument for sorting by burst time or priority
+ */
+void preemptive(vector<process *> &processes, const string &algorithm) {
     queue<process *> yetToArrive;
     queue<process *> readyQueue;
 
@@ -218,8 +241,8 @@ void Preemptive(vector<process *> &processes, const string &algorithm) {
 
         // Loop through each process in the yetToArrive queue and push the
         // items that have arrived to readyQueue
-        while(!yetToArrive.empty() &&
-              yetToArrive.front()->arrivalTime <= time) {
+        while (!yetToArrive.empty() &&
+               yetToArrive.front()->arrivalTime <= time) {
             process *p = yetToArrive.front();
             // Move process to ready queue
             readyQueue.push(p);
@@ -246,20 +269,22 @@ void Preemptive(vector<process *> &processes, const string &algorithm) {
                 }
             }
 
-
+            // bool that is true when a different process is being started or resumed
             bool contextSwitch = true;
 
-            while(!readyQueue.empty()) {
+            while (!readyQueue.empty()) {
                 // Current process
                 process *currentProcess = readyQueue.front();
 
                 while (currentProcess->executionTimeLeft > 0) {
+                    // if the process switched from the previous iteration
                     if (contextSwitch) {
                         cout << "Time " << time << " Process " << currentProcess->ID << endl;
                         contextSwitch = false;
                     }
                     time++;
-                    currentProcess->executionTimeLeft--;
+                    currentProcess->executionTimeLeft--; // decrement execution time
+                    // if execution completes, remove it from the queue, and update time statistics
                     if (currentProcess->executionTimeLeft == 0) {
                         readyQueue.pop();
                         currentProcess->termination = time;
@@ -272,19 +297,24 @@ void Preemptive(vector<process *> &processes, const string &algorithm) {
                         totalTurnaround += turnaround;
                     }
 
+                    // bool to see if newProcesses have entered the readyQueue
                     bool newProcesses;
+
+                    // loops through the processes yet to Arrive and adds them to the readyQueue if they have arrived
                     while (!yetToArrive.empty() && time >= yetToArrive.front()->arrivalTime) {
                         readyQueue.push(yetToArrive.front());
                         yetToArrive.pop();
                         newProcesses = true;
                     }
 
+                    // if there are more processes ready, sort them according to burst time or priority
                     if (!readyQueue.empty()) {
                         if (newProcesses) {
                             (algorithm == "SRTF") ? sortReadyQueue(readyQueue) : sortNPQueue(readyQueue);
                             if (currentProcess != readyQueue.front()) {
                                 contextSwitch = true;
                             }
+                            // set the current process to the ready processes with the shortest burst time
                             currentProcess = readyQueue.front();
                         }
                     }
@@ -293,27 +323,19 @@ void Preemptive(vector<process *> &processes, const string &algorithm) {
         }
     }
 
+    printStatistics(time, idleTime, totalTurnaround, totalBurstTime, worstCaseWaitTime, processes.size());
 
-
-
-
-    // Print stats on cpu utilization, avg wait time, worst-case wait time
-    cout << "CPU Utilization: " << round(100 * (time - idleTime) / (double)
-            time) << "%" << endl;
-    cout << "Average waiting time: " << setprecision(4) <<
-         (totalTurnaround - totalBurstTime) / (double) processes.size() << endl;
-    cout << "Worst-case waiting time: " << worstCaseWaitTime << endl;
 }
 
 /**
- * Sorts readyQueue by lowest burst time
+ * Sorts readyQueue by lowest burst time left
  * @param readyQueue
  */
 void sortReadyQueue(queue<process *> &readyQueue) {
     vector<process *> v;
 
     // Move processes to vector to allow sorting
-    while(!readyQueue.empty()) {
+    while (!readyQueue.empty()) {
         process *p = readyQueue.front();
         readyQueue.pop();
         v.push_back(p);
@@ -329,7 +351,7 @@ void sortReadyQueue(queue<process *> &readyQueue) {
     }
 
     // Move sorted processes back to queue
-    for (auto & i : v) {
+    for (auto &i : v) {
         readyQueue.push(i);
     }
 }
@@ -339,17 +361,17 @@ void sortReadyQueue(queue<process *> &readyQueue) {
  *
  * @param readyQueue queue to be sorted
  */
-void sortNPQueue(queue<process *> &readyQueue){
+void sortNPQueue(queue<process *> &readyQueue) {
     vector<process *> v;
 
     // Move processes to vector to allow sorting
-    while(!readyQueue.empty()) {
+    while (!readyQueue.empty()) {
         process *p = readyQueue.front();
         readyQueue.pop();
         v.push_back(p);
     }
 
-    // Sort processes by burst time
+    // Sort processes by priority
     for (int i = 0; i < v.size(); i++) {
         for (int j = i + 1; j < v.size(); j++) {
             if (v.at(i)->priority > v.at(j)->priority) {
@@ -359,7 +381,46 @@ void sortNPQueue(queue<process *> &readyQueue){
     }
 
     // Move sorted processes back to queue
-    for (auto & i : v) {
+    for (auto &i : v) {
         readyQueue.push(i);
     }
+}
+
+/**
+ * Sorts processes by arrival time
+ *
+ * @param processes to sort by arrival time
+ */
+void sortByArrival(vector<process *> &processes) {
+    // Sort processes by arrivalTime
+    for (int i = 0; i < processes.size(); i++) {
+        for (int j = i + 1; j < processes.size(); j++) {
+            if (processes.at(i)->arrivalTime > processes.at(j)->arrivalTime) {
+                swap(processes.at(i), processes.at(j));
+            }
+        }
+    }
+}
+
+/**
+ * Print Timing Statistics
+ * @param time finishing time
+ * @param idleTime time with no processes running
+ * @param totalTurnaround
+ * @param totalBurstTime
+ * @param worstCaseWaitTime
+ * @param processesSize number of processes
+ */
+void printStatistics(int time, int idleTime,
+                     int totalTurnaround, int totalBurstTime,
+                     int worstCaseWaitTime, int processesSize) {
+
+    // Print stats on cpu utilization, avg wait time, worst-case wait time
+    cout << "CPU Utilization: " << round(100 * (time - idleTime) / (double)
+            time) << "%" << endl;
+    double avgWaitTime = (totalTurnaround - totalBurstTime) / (double)
+            processesSize;
+    printf("Average waiting time: %.2f\n", avgWaitTime);
+    cout << "Worst-case waiting time: " << worstCaseWaitTime << endl;
+
 }

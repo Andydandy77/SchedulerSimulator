@@ -344,11 +344,12 @@ void sortReadyQueue(queue<process *> &readyQueue) {
     // Sort processes by burst time
     for (int i = 0; i < v.size(); i++) {
         for (int j = i + 1; j < v.size(); j++) {
-            if (v.at(i)->executionTimeLeft > v.at(j)->executionTimeLeft) {
+            if (v.at(i)->executionTimeLeft > v.at(j)->executionTimeLeft ||
+                    (v.at(i)->executionTimeLeft == v.at(j)->executionTimeLeft && v.at(i)->ID > v.at(j)->ID))
                 swap(v.at(i), v.at(j));
-            }
         }
     }
+
 
     // Move sorted processes back to queue
     for (auto &i : v) {
@@ -395,9 +396,11 @@ void sortByArrival(vector<process *> &processes) {
     // Sort processes by arrivalTime
     for (int i = 0; i < processes.size(); i++) {
         for (int j = i + 1; j < processes.size(); j++) {
-            if (processes.at(i)->arrivalTime > processes.at(j)->arrivalTime) {
+            if (processes.at(i)->arrivalTime > processes.at(j)->arrivalTime
+                    ) {
                 swap(processes.at(i), processes.at(j));
             }
+
         }
     }
 }
